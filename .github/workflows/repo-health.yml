@@ -1,0 +1,44 @@
+name: Repo Health
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  markdown:
+    name: Markdown and repository sanity checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required community files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            README.md
+            LICENSE
+            CONTRIBUTING.md
+            CODE_OF_CONDUCT.md
+            SECURITY.md
+            SUPPORT.md
+            ROADMAP.md
+            CHANGELOG.md
+            .github/PULL_REQUEST_TEMPLATE.md
+          )
+          for file in "${required[@]}"; do
+            test -f "$file" || { echo "Missing required file: $file"; exit 1; }
+          done
+
+      - name: Check markdown links and formatting basics
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -name '*.md' -not -path './.git/*' -print0 | xargs -0 -I{} sh -c 'test -s "$1" || { echo "Empty markdown file: $1"; exit 1; }' _ {}
+          grep -R "TODO" . --include='*.md' && { echo "TODO markers found in markdown"; exit 1; } || true
