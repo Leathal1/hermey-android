@@ -17,6 +17,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/Leathal1/hermey-android/core/auth"
@@ -137,28 +138,66 @@ func (c *HermeyClient) Health() error {
 // Sessions
 // ============================================================================
 
-// ListSessions returns all sessions.
-func (c *HermeyClient) ListSessions() (*endpoints.ListSessionsResponse, error) {
-	return endpoints.ListSessions(c.apiClient)
+// ListProjectsJson returns all projects as a JSON string.
+func (c *HermeyClient) ListProjectsJson() (string, error) {
+	projects, err := endpoints.ListProjects(c.apiClient)
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(projects)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
-// GetSession loads a session with optional messages.
-func (c *HermeyClient) GetSession(sessionID string, messages bool, msgLimit int) (*endpoints.GetSessionResponse, error) {
-	return endpoints.GetSession(c.apiClient, &endpoints.GetSessionRequest{
+// ListSessions returns all sessions as a JSON string.
+func (c *HermeyClient) ListSessions() (string, error) {
+	resp, err := endpoints.ListSessions(c.apiClient)
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(resp.Sessions)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// GetSessionJson loads a session and recent messages as a JSON string.
+func (c *HermeyClient) GetSessionJson(sessionID string, messages bool, msgLimit int) (string, error) {
+	resp, err := endpoints.GetSession(c.apiClient, &endpoints.GetSessionRequest{
 		SessionID: sessionID,
 		Messages:  messages,
 		MsgLimit:  msgLimit,
 	})
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
-// NewSession creates a new session.
-func (c *HermeyClient) NewSession(workspace, model, modelProvider, profile string) (*models.Session, error) {
-	return endpoints.NewSession(c.apiClient, &endpoints.NewSessionRequest{
+// NewSessionJson creates a new session and returns it as a JSON string.
+func (c *HermeyClient) NewSessionJson(workspace, model, modelProvider, profile, title string) (string, error) {
+	s, err := endpoints.NewSession(c.apiClient, &endpoints.NewSessionRequest{
 		Workspace:     workspace,
 		Model:         model,
 		ModelProvider: modelProvider,
 		Profile:       profile,
+		Title:         title,
 	})
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // RenameSession renames a session.
@@ -184,28 +223,23 @@ func (c *HermeyClient) ArchiveSession(sessionID string, archived bool) error {
 	return endpoints.ArchiveSession(c.apiClient, &endpoints.ArchiveSessionRequest{SessionID: sessionID, Archived: archived})
 }
 
-// ForkSession forks a session.
-func (c *HermeyClient) ForkSession(sessionID, title string) (*endpoints.ForkSessionResponse, error) {
-	return endpoints.ForkSession(c.apiClient, &endpoints.ForkSessionRequest{SessionID: sessionID, Title: title})
+// ForkSessionJson forks a session and returns the new session id.
+func (c *HermeyClient) ForkSessionJson(sessionID, title string) (string, error) {
+	resp, err := endpoints.ForkSession(c.apiClient, &endpoints.ForkSessionRequest{SessionID: sessionID, Title: title})
+	if err != nil {
+		return "", err
+	}
+	return resp.NewSessionID, nil
 }
 
-// MergeSession merges two sessions.
-func (c *HermeyClient) MergeSession(sourceID, targetID string) error {
-	return endpoints.MergeSession(c.apiClient, &endpoints.MergeSessionRequest{SourceID: sourceID, TargetID: targetID})
+// MoveSession moves a session to a project.
+func (c *HermeyClient) MoveSession(sessionID, projectID string) error {
+	return endpoints.MoveSession(c.apiClient, &endpoints.MoveSessionRequest{SessionID: sessionID, ProjectID: projectID})
 }
 
-// ExportSession exports a session as raw JSON bytes.
-func (c *HermeyClient) ExportSession(sessionID, format string) ([]byte, error) {
-	return endpoints.ExportSession(c.apiClient, &endpoints.ExportSessionRequest{SessionID: sessionID, Format: format})
-}
-
-// ImportSession imports a previously exported session.
-func (c *HermeyClient) ImportSession(data []byte, title, projectID string) (*endpoints.ImportSessionResponse, error) {
-	return endpoints.ImportSession(c.apiClient, &endpoints.ImportSessionRequest{
-		Data:      data,
-		Title:     title,
-		ProjectID: projectID,
-	})
+// TruncateSession truncates a session at a message.
+func (c *HermeyClient) TruncateSession(sessionID, messageID string, keepCount int) error {
+	return endpoints.TruncateSession(c.apiClient, &endpoints.TruncateSessionRequest{SessionID: sessionID, MessageID: messageID, KeepCount: keepCount})
 }
 
 // CompactSession compacts a session.
@@ -213,9 +247,17 @@ func (c *HermeyClient) CompactSession(sessionID string) error {
 	return endpoints.CompactSession(c.apiClient, &endpoints.CompactSessionRequest{SessionID: sessionID})
 }
 
-// SearchSessions searches sessions by query.
-func (c *HermeyClient) SearchSessions(query string, limit int) (*endpoints.SearchSessionsResponse, error) {
-	return endpoints.SearchSessions(c.apiClient, &endpoints.SearchSessionsRequest{Query: query, Limit: limit})
+// SearchSessionsJson searches sessions by query and returns a JSON string.
+func (c *HermeyClient) SearchSessionsJson(query string, limit int) (string, error) {
+	resp, err := endpoints.SearchSessions(c.apiClient, &endpoints.SearchSessionsRequest{Query: query, Limit: limit})
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(resp.Sessions)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // ============================================================================
@@ -335,9 +377,17 @@ func (c *HermeyClient) UploadFile(sessionID, filename string, content []byte, pa
 // Models / Providers / Profiles / Settings / Reasoning / Tools
 // ============================================================================
 
-// ListModels returns available models.
-func (c *HermeyClient) ListModels() ([]models.ModelInfo, error) {
-	return endpoints.ListModels(c.apiClient)
+// ListModelsJson returns available models as a JSON string.
+func (c *HermeyClient) ListModelsJson() (string, error) {
+	models, err := endpoints.ListModels(c.apiClient)
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(models)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // ListProviders returns available model providers.
@@ -345,9 +395,17 @@ func (c *HermeyClient) ListProviders() ([]models.ProviderInfo, error) {
 	return endpoints.ListProviders(c.apiClient)
 }
 
-// ListProfiles returns available agent profiles.
-func (c *HermeyClient) ListProfiles() ([]models.ProfileInfo, error) {
-	return endpoints.ListProfiles(c.apiClient)
+// ListProfilesJson returns available profiles as a JSON string.
+func (c *HermeyClient) ListProfilesJson() (string, error) {
+	profiles, err := endpoints.ListProfiles(c.apiClient)
+	if err != nil {
+		return "", err
+	}
+	b, err := json.Marshal(profiles)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // GetSettings returns server settings.
@@ -418,11 +476,6 @@ func (c *HermeyClient) ListSkills() ([]models.Skill, error) {
 // GetMemory returns agent memory notes.
 func (c *HermeyClient) GetMemory() ([]models.MemoryEntry, error) {
 	return endpoints.GetMemory(c.apiClient)
-}
-
-// ListProjects returns all projects.
-func (c *HermeyClient) ListProjects() ([]models.Project, error) {
-	return endpoints.ListProjects(c.apiClient)
 }
 
 // ListKanbanTasks returns kanban tasks.

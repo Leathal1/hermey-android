@@ -257,6 +257,29 @@ func ImportSession(c *client.APIClient, req *ImportSessionRequest) (*ImportSessi
 	return &r, nil
 }
 
+// MoveSessionRequest moves a session to a project.
+type MoveSessionRequest struct {
+	SessionID string `json:"session_id"`
+	ProjectID string `json:"project_id"`
+}
+
+// MoveSession moves a session to a different project.
+func MoveSession(c *client.APIClient, req *MoveSessionRequest) error {
+	return c.DoPOST("/api/session/move", req, nil)
+}
+
+// TruncateSessionRequest truncates a session at a message.
+type TruncateSessionRequest struct {
+	SessionID string `json:"session_id"`
+	MessageID string `json:"message_id,omitempty"`
+	KeepCount int    `json:"keep_count,omitempty"`
+}
+
+// TruncateSession truncates a session.
+func TruncateSession(c *client.APIClient, req *TruncateSessionRequest) error {
+	return c.DoPOST("/api/session/truncate", req, nil)
+}
+
 // CompactSessionRequest compacts a session's message history.
 type CompactSessionRequest struct {
 	SessionID string `json:"session_id"`

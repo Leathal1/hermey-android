@@ -44,6 +44,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _attachments = MutableStateFlow<List<Attachment>>(emptyList())
     val attachments: StateFlow<List<Attachment>> = _attachments
 
+    private val _scrollToBottom = MutableStateFlow(false)
+    val scrollToBottom: StateFlow<Boolean> = _scrollToBottom
+
     private var client: HermeyClient? = null
     private var currentStreamId: String? = null
     private var sessionId: String? = null
@@ -68,11 +71,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadHistory(sessionId: String) {
+        _uiState.value = ChatUiState.Loading
         viewModelScope.launch(Dispatchers.IO) {
-            val c = ensureClient() ?: return@launch
+            val c = ensureClient() ?: run {
+                _uiState.value = ChatUiState.Error("Server not configured")
+                return@launch
+            }
             try {
-                val json = c.getChatHistory(sessionId, 100)
-                if (json.isNullOrBlank()) return@launch
+                val json = c.getChatHistory(sessionId, 50L)
+                if (json.isNullOrBlank()) {
+                    _uiState.value = ChatUiState.Ready()
+                    return@launch
+                }
                 val array = JSONArray(json)
                 val loaded = (0 until array.length()).map { i ->
                     val obj = array.getJSONObject(i)
@@ -83,13 +93,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             "system" -> MessageRole.System
                             else -> MessageRole.User
                         },
-                        content = StringBuilder(obj.optString("content"))
+                        content = StringBuilder(obj.optString("content")),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
                     )
                 }
                 _messages.value = loaded
-            } catch (_: Exception) {
+                _scrollToBottom.value = true
+                _uiState.value = ChatUiState.Ready()
+            } catch (e: Exception) {
+                _uiState.value = ChatUiState.Error("Failed to load history: ${e.message}")
             }
         }
+    }
+
+    fun onScrollToBottomConsumed() {
+        _scrollToBottom.value = false
     }
 
     fun onInputChange(text: String) {
