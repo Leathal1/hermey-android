@@ -1,0 +1,41 @@
+name: Security design review
+description: Propose or review security-sensitive design changes
+title: "Security design: "
+labels: ["security", "design"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for design discussion. Do not disclose active vulnerabilities here; follow SECURITY.md for private vulnerability reports.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What flow, module, or behavior needs review?
+    validations:
+      required: true
+  - type: textarea
+    id: assets
+    attributes:
+      label: Assets and trust boundaries
+      description: What data, identities, tokens, devices, or actions are involved?
+    validations:
+      required: true
+  - type: textarea
+    id: threats
+    attributes:
+      label: Threats considered
+      description: List misuse cases, attacker capabilities, and failure modes.
+    validations:
+      required: true
+  - type: textarea
+    id: controls
+    attributes:
+      label: Proposed controls
+      description: What mitigations should Hermey implement?
+    validations:
+      required: true
+  - type: textarea
+    id: open_questions
+    attributes:
+      label: Open questions
