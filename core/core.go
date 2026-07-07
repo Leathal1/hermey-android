@@ -16,6 +16,9 @@
 package core
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/Leathal1/hermey-android/core/auth"
 	"github.com/Leathal1/hermey-android/core/client"
 	"github.com/Leathal1/hermey-android/core/endpoints"
@@ -24,54 +27,49 @@ import (
 	"github.com/Leathal1/hermey-android/core/stream"
 )
 
+// Mobile-friendly DTOs exposed to gomobile. Types defined in this package
+// (rather than imported packages) are bound into the Android AAR.
+
+type ChatMessage struct {
+	ID      string
+	Role    string
+	Content string
+}
+
+type ChatHistoryResult struct {
+	Messages []ChatMessage
+}
+
+type StreamStartResult struct {
+	StreamID string
+}
+
+type SteerResult struct {
+	Accepted bool
+}
+
+type UploadFileResult struct {
+	Path string
+}
+
 // Export types so gomobile generates bindings for the streaming bridge.
-// Kotlin implements sse.EventListener and passes it to StreamManager.Start.
+// Kotlin implements EventListenerProxy and passes it to SubscribeStream.
 var (
-	_ sse.EventListener = (*EventListenerProxy)(nil)
+	_ sse.EventListener = (EventListenerProxy)(nil)
 	_ *stream.Manager
 )
 
-// EventListenerProxy is a concrete implementation of sse.EventListener that
-// forwards all events to an embedded listener. It exists purely so gomobile
-// emits the EventListener interface in the AAR.
-type EventListenerProxy struct {
-	Listener sse.EventListener
-}
-
-func (p *EventListenerProxy) OnToken(text string) {
-	if p.Listener != nil {
-		p.Listener.OnToken(text)
-	}
-}
-func (p *EventListenerProxy) OnToolCall(callJSON string) {
-	if p.Listener != nil {
-		p.Listener.OnToolCall(callJSON)
-	}
-}
-func (p *EventListenerProxy) OnToolResult(resultJSON string) {
-	if p.Listener != nil {
-		p.Listener.OnToolResult(resultJSON)
-	}
-}
-func (p *EventListenerProxy) OnReasoning(text string) {
-	if p.Listener != nil {
-		p.Listener.OnReasoning(text)
-	}
-}
-func (p *EventListenerProxy) OnStreamEnd() {
-	if p.Listener != nil {
-		p.Listener.OnStreamEnd()
-	}
-}
-func (p *EventListenerProxy) OnError(msg string) {
-	if p.Listener != nil {
-		p.Listener.OnError(msg)
-	}
-}
-func (p *EventListenerProxy) OnCancel() {
-	if p.Listener != nil {
-		p.Listener.OnCancel()
-	}
+// EventListenerProxy is the callback interface passed from Android into the
+// Go SSE stream. The method names match sse.EventListener so a value of this
+// interface also satisfies that interface.
+type EventListenerProxy interface {
+	OnToken(text string)
+	OnToolCall(callJSON string)
+	OnToolResult(resultJSON string)
+	OnReasoning(text string)
+	OnStreamEnd()
+	OnError(msg string)
+	OnCancel()
 }
 
 
@@ -225,13 +223,17 @@ func (c *HermeyClient) SearchSessions(query string, limit int) (*endpoints.Searc
 // ============================================================================
 
 // StartChat starts a new assistant turn and returns the stream id.
-func (c *HermeyClient) StartChat(sessionID, message, workspace, model string) (*models.StreamStartResponse, error) {
-	return endpoints.StartChat(c.apiClient, &endpoints.StartChatRequest{
+func (c *HermeyClient) StartChat(sessionID, message, workspace, model string) (*StreamStartResult, error) {
+	resp, err := endpoints.StartChat(c.apiClient, &endpoints.StartChatRequest{
 		SessionID: sessionID,
 		Message:   message,
 		Workspace: workspace,
 		Model:     model,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return &StreamStartResult{StreamID: resp.StreamID}, nil
 }
 
 // CancelChat cancels an active chat stream.
@@ -240,13 +242,30 @@ func (c *HermeyClient) CancelChat(streamID string) error {
 }
 
 // SteerChat sends a steering message to an active stream.
-func (c *HermeyClient) SteerChat(sessionID, text string) (*models.SteerResponse, error) {
-	return endpoints.SteerChat(c.apiClient, &endpoints.SteerChatRequest{SessionID: sessionID, Text: text})
+func (c *HermeyClient) SteerChat(sessionID, text string) (*SteerResult, error) {
+	resp, err := endpoints.SteerChat(c.apiClient, &endpoints.SteerChatRequest{SessionID: sessionID, Text: text})
+	if err != nil {
+		return nil, err
+	}
+	return &SteerResult{Accepted: resp.Accepted}, nil
 }
 
-// GetChatHistory returns chat messages for a session.
-func (c *HermeyClient) GetChatHistory(sessionID string, limit int) (*endpoints.GetChatHistoryResponse, error) {
-	return endpoints.GetChatHistory(c.apiClient, &endpoints.GetChatHistoryRequest{SessionID: sessionID, Limit: limit})
+// GetChatHistory returns the most recent chat messages as a JSON array string.
+func (c *HermeyClient) GetChatHistory(sessionID string, limit int) (string, error) {
+	resp, err := endpoints.GetChatHistory(c.apiClient, &endpoints.GetChatHistoryRequest{SessionID: sessionID, Limit: limit})
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, m := range resp.Messages {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, `{"id":%q,"role":%q,"content":%q}`, m.ID, m.Role, m.Content)
+	}
+	buf.WriteByte(']')
+	return buf.String(), nil
 }
 
 // SendFeedback submits feedback on a message.
@@ -265,9 +284,9 @@ func (c *HermeyClient) StreamStatus(streamID string) (bool, error) {
 
 // SubscribeStream connects to the SSE chat stream and delivers events to the listener.
 // This method blocks; call it from a background thread on Android.
-func (c *HermeyClient) SubscribeStream(streamID string, listener sse.EventListener) error {
-	stream := sse.NewStream(c.baseURL, streamID, c.apiClient.HTTPClient())
-	return stream.Subscribe(listener)
+func (c *HermeyClient) SubscribeStream(streamID string, listener EventListenerProxy) error {
+	s := sse.NewStream(c.baseURL, streamID, c.apiClient.HTTPClient())
+	return s.Subscribe(listener)
 }
 
 // ============================================================================
@@ -299,13 +318,17 @@ func (c *HermeyClient) DeleteFile(sessionID, filePath string) error {
 }
 
 // UploadFile uploads a file to the workspace.
-func (c *HermeyClient) UploadFile(sessionID, filename string, content []byte, path string) (*models.UploadResult, error) {
-	return endpoints.UploadFile(c.apiClient, &endpoints.UploadFileRequest{
+func (c *HermeyClient) UploadFile(sessionID, filename string, content []byte, path string) (*UploadFileResult, error) {
+	resp, err := endpoints.UploadFile(c.apiClient, &endpoints.UploadFileRequest{
 		SessionID: sessionID,
 		Filename:  filename,
 		Content:   content,
 		Path:      path,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return &UploadFileResult{Path: resp.Path}, nil
 }
 
 // ============================================================================

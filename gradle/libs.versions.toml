@@ -15,7 +15,7 @@ junit = "4.13.2"
 junitExt = "1.2.1"
 espresso = "3.6.1"
 markwon = "4.6.2"
-prism4j = "2.1.0"
+prism4j = "2.0.0"
 coil = "2.7.0"
 
 [libraries]
@@ -44,7 +44,7 @@ markwon-image = { group = "io.noties.markwon", name = "image", version.ref = "ma
 markwon-image-coil = { group = "io.noties.markwon", name = "image-coil", version.ref = "markwon" }
 markwon-linkify = { group = "io.noties.markwon", name = "linkify", version.ref = "markwon" }
 markwon-syntax-highlight = { group = "io.noties.markwon", name = "syntax-highlight", version.ref = "markwon" }
-prism4j = { group = "io.noties.prism4j", name = "prism4j", version.ref = "prism4j" }
+prism4j = { group = "io.noties", name = "prism4j", version.ref = "prism4j" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
 
