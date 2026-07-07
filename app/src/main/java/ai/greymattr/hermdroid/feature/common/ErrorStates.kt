@@ -74,7 +74,7 @@ fun ErrorState(
                 Text("Retry")
             }
         }
-        if (error AuthExpired) {
+        if (error is AuthExpired) {
             onSignIn?.let {
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = it) {

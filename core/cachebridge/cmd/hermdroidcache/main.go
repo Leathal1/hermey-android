@@ -50,10 +50,12 @@ func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_close(env *C.JNIEn
 
 //export Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_putSession
 func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_putSession(env *C.JNIEnv, clazz C.jclass, handle C.jint, id C.jstring, title C.jstring, lastMessageAtMs C.jlong, count C.jint) C.jint {
-	cid := C.GoString(C.get_utf(env, id))
-	defer C.release_utf(env, id, C.get_utf(env, id))
-	ctitle := C.GoString(C.get_utf(env, title))
-	defer C.release_utf(env, title, C.get_utf(env, title))
+	cidC := C.get_utf(env, id)
+	defer C.release_utf(env, id, cidC)
+	cid := C.GoString(cidC)
+	ctitleC := C.get_utf(env, title)
+	defer C.release_utf(env, title, ctitleC)
+	ctitle := C.GoString(ctitleC)
 	err := cachebridge.PutSession(
 		&cachebridge.CacheHandle{Value: int(handle)},
 		cid, ctitle, int64(lastMessageAtMs), int(count))
@@ -78,8 +80,9 @@ func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_listSessionsJson(e
 
 //export Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_getMessagesJson
 func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_getMessagesJson(env *C.JNIEnv, clazz C.jclass, handle C.jint, sessionID C.jstring) C.jstring {
-	csid := C.GoString(C.get_utf(env, sessionID))
-	defer C.release_utf(env, sessionID, C.get_utf(env, sessionID))
+	csidC := C.get_utf(env, sessionID)
+	defer C.release_utf(env, sessionID, csidC)
+	csid := C.GoString(csidC)
 	json, err := cachebridge.GetMessagesJson(
 		&cachebridge.CacheHandle{Value: int(handle)}, csid)
 	if err != nil {
@@ -93,14 +96,18 @@ func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_getMessagesJson(en
 
 //export Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_putMessage
 func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_putMessage(env *C.JNIEnv, clazz C.jclass, handle C.jint, id C.jstring, sessionID C.jstring, role C.jstring, content C.jstring, timestampMs C.jlong) C.jint {
-	cid := C.GoString(C.get_utf(env, id))
-	defer C.release_utf(env, id, C.get_utf(env, id))
-	csid := C.GoString(C.get_utf(env, sessionID))
-	defer C.release_utf(env, sessionID, C.get_utf(env, sessionID))
-	crole := C.GoString(C.get_utf(env, role))
-	defer C.release_utf(env, role, C.get_utf(env, role))
-	ccontent := C.GoString(C.get_utf(env, content))
-	defer C.release_utf(env, content, C.get_utf(env, content))
+	cidC := C.get_utf(env, id)
+	defer C.release_utf(env, id, cidC)
+	cid := C.GoString(cidC)
+	csidC := C.get_utf(env, sessionID)
+	defer C.release_utf(env, sessionID, csidC)
+	csid := C.GoString(csidC)
+	croleC := C.get_utf(env, role)
+	defer C.release_utf(env, role, croleC)
+	crole := C.GoString(croleC)
+	ccontentC := C.get_utf(env, content)
+	defer C.release_utf(env, content, ccontentC)
+	ccontent := C.GoString(ccontentC)
 	err := cachebridge.PutMessage(
 		&cachebridge.CacheHandle{Value: int(handle)},
 		cid, csid, crole, ccontent, int64(timestampMs))
@@ -113,8 +120,9 @@ func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_putMessage(env *C.
 
 //export Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_deleteSession
 func Java_ai_greymattr_hermdroid_core_cache_HermdroidCacheLib_deleteSession(env *C.JNIEnv, clazz C.jclass, handle C.jint, sessionID C.jstring) C.jint {
-	csid := C.GoString(C.get_utf(env, sessionID))
-	defer C.release_utf(env, sessionID, C.get_utf(env, sessionID))
+	csidC := C.get_utf(env, sessionID)
+	defer C.release_utf(env, sessionID, csidC)
+	csid := C.GoString(csidC)
 	err := cachebridge.DeleteSession(&cachebridge.CacheHandle{Value: int(handle)}, csid)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cachebridge deleteSession error: %v\n", err)
