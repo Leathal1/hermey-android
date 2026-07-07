@@ -47,3 +47,6 @@ local.properties
 *.iml
 .gradle/
 core/vendor/
+
+# Kotlin build cache
+.kotlin/

@@ -38,10 +38,9 @@ fun EmptyState(
         verticalArrangement = Arrangement.Center
     ) {
         val icon = when (empty) {
-            NoSessions -> Icons.AutoMirrored.Filled.List
-            NoSkills -> Icons.Default.Build
-            NoTasks -> Icons.Default.Info
-            else -> Icons.Default.List
+            is NoSessions -> Icons.AutoMirrored.Filled.Chat
+            is NoSkills -> Icons.Default.Build
+            is NoTasks -> Icons.Default.Assignment
         }
         Icon(
             imageVector = icon,

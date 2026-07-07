@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.material.icons.extended)
 
     debugImplementation(libs.androidx.ui.tooling)
 

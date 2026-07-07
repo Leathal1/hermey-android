@@ -1,5 +1,8 @@
 // Package client provides the APIClient for all hermes-webui REST endpoints.
-// It wraps the auth.Client's http.Client and adds typed methods for every endpoint.
+// It wraps the auth.Client's http.Client and adds generic request helpers.
+//
+// CSRF note: the server validates Origin/Referer on browser POSTs.  This
+// client is a non-browser caller, so it deliberately omits both headers.
 package client
 
 import (
@@ -9,11 +12,22 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
+	"time"
 
 	"github.com/Leathal1/hermey-android/core/auth"
-	"github.com/Leathal1/hermey-android/core/models"
 )
+
+// APIError is an HTTP error returned by the hermes-webui server.
+type APIError struct {
+	StatusCode int    `json:"status_code"`
+	Message    string `json:"message"`
+	Path       string `json:"path,omitempty"`
+}
+
+// Error implements the error interface.
+func (e *APIError) Error() string {
+	return fmt.Sprintf("api error %d on %s: %s", e.StatusCode, e.Path, e.Message)
+}
 
 // APIClient is the typed HTTP client for the hermes-webui API.
 // It handles cookie-based auth, CSRF rules, and lenient JSON decoding.
@@ -25,8 +39,19 @@ type APIClient struct {
 // NewAPIClient creates a new APIClient using the auth client's HTTP client.
 func NewAPIClient(authClient *auth.Client) *APIClient {
 	return &APIClient{
-		baseURL:    "", // derived from auth client
+		baseURL:    "",
 		httpClient: authClient.HTTPClient(),
+	}
+}
+
+// NewAPIClientWithHTTP creates a client from an arbitrary http.Client.
+func NewAPIClientWithHTTP(baseURL string, httpClient *http.Client) *APIClient {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	return &APIClient{
+		baseURL:    baseURL,
+		httpClient: httpClient,
 	}
 }
 
@@ -35,310 +60,104 @@ func (c *APIClient) SetBaseURL(baseURL string) {
 	c.baseURL = baseURL
 }
 
-// doGet performs a GET request and decodes the JSON response.
-func (c *APIClient) doGet(path string, result interface{}) error {
-	resp, err := c.httpClient.Get(c.baseURL + path)
-	if err != nil {
-		return fmt.Errorf("client: GET %s: %w", path, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("client: GET %s: HTTP %d: %s", path, resp.StatusCode, string(body))
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-		return fmt.Errorf("client: decode %s: %w", path, err)
-	}
-	return nil
+// BaseURL returns the configured server base URL.
+func (c *APIClient) BaseURL() string {
+	return c.baseURL
 }
 
-// doPost performs a POST request with a JSON body and decodes the response.
-func (c *APIClient) doPost(path string, body, result interface{}) error {
+// HTTPClient returns the underlying http.Client.
+func (c *APIClient) HTTPClient() *http.Client {
+	return c.httpClient
+}
+
+func (c *APIClient) makeURL(path string) string {
+	return c.baseURL + path
+}
+
+// doRequest performs an HTTP request, sets JSON content type when a body is
+// present, and decodes a JSON response when result is non-nil.
+func (c *APIClient) doRequest(method, path string, body interface{}, result interface{}) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("client: marshal body for %s: %w", path, err)
+			return nil, fmt.Errorf("client: marshal body for %s: %w", path, err)
 		}
 		bodyReader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL+path, bodyReader)
+	req, err := http.NewRequest(method, c.makeURL(path), bodyReader)
 	if err != nil {
-		return fmt.Errorf("client: create request %s: %w", path, err)
+		return nil, fmt.Errorf("client: create request %s: %w", path, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	// CSRF: do NOT set Origin or Referer
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("client: POST %s: %w", path, err)
+		return nil, fmt.Errorf("client: %s %s: %w", method, path, err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("client: POST %s: HTTP %d: %s", path, resp.StatusCode, string(respBody))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(bodyBytes),
+			Path:       path,
+		}
 	}
 
 	if result != nil {
 		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-			return fmt.Errorf("client: decode %s: %w", path, err)
+			resp.Body.Close()
+			return nil, fmt.Errorf("client: decode %s: %w", path, err)
 		}
 	}
-	return nil
+	return resp, nil
 }
 
-// ── Health ──
+// DoGET performs a GET request and decodes the JSON response into result.
+func (c *APIClient) DoGET(path string, result interface{}) error {
+	_, err := c.doRequest("GET", path, nil, result)
+	return err
+}
 
-// Health checks if the server is reachable.
-func (c *APIClient) Health() error {
-	resp, err := c.httpClient.Get(c.baseURL + "/health")
+// DoPOST performs a POST request with a JSON body and decodes the response.
+func (c *APIClient) DoPOST(path string, body, result interface{}) error {
+	_, err := c.doRequest("POST", path, body, result)
+	return err
+}
+
+// DoDELETE performs a DELETE request.
+func (c *APIClient) DoDELETE(path string, result interface{}) error {
+	_, err := c.doRequest("DELETE", path, nil, result)
+	return err
+}
+
+// DoPUT performs a PUT request with a JSON body.
+func (c *APIClient) DoPUT(path string, body, result interface{}) error {
+	_, err := c.doRequest("PUT", path, body, result)
+	return err
+}
+
+// DoRawGET performs a GET and returns the raw response body.
+func (c *APIClient) DoRawGET(path string) ([]byte, error) {
+	resp, err := c.doRequest("GET", path, nil, nil)
 	if err != nil {
-		return fmt.Errorf("client: health check: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("client: health check: HTTP %d", resp.StatusCode)
+	return io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+}
+
+// BuildQuery is a helper to URL-encode query parameters.
+func BuildQuery(params map[string]string) string {
+	values := url.Values{}
+	for k, v := range params {
+		values.Set(k, v)
 	}
-	return nil
+	return values.Encode()
 }
-
-// ── Sessions ──
-
-// SessionsListResponse is the response from GET /api/sessions.
-type SessionsListResponse struct {
-	Sessions []models.Session `json:"sessions"`
-}
-
-// ListSessions returns all sessions.
-func (c *APIClient) ListSessions() (*SessionsListResponse, error) {
-	var result SessionsListResponse
-	if err := c.doGet("/api/sessions", &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// SessionDetailResponse is the response from GET /api/session.
-type SessionDetailResponse struct {
-	Session  models.Session    `json:"session"`
-	Messages []models.ChatMessage `json:"messages"`
-}
-
-// GetSession loads a session with the last N messages.
-func (c *APIClient) GetSession(sessionID string, msgLimit int) (*SessionDetailResponse, error) {
-	path := fmt.Sprintf("/api/session?session_id=%s&messages=1&msg_limit=%d",
-		url.QueryEscape(sessionID), msgLimit)
-	var result SessionDetailResponse
-	if err := c.doGet(path, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// NewSession creates a new session.
-func (c *APIClient) NewSession(workspace, model, modelProvider, profile string) (*models.Session, error) {
-	body := map[string]string{}
-	if workspace != "" { body["workspace"] = workspace }
-	if model != "" { body["model"] = model }
-	if modelProvider != "" { body["model_provider"] = modelProvider }
-	if profile != "" { body["profile"] = profile }
-
-	var result models.Session
-	if err := c.doPost("/api/session/new", body, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// RenameSession renames a session.
-func (c *APIClient) RenameSession(sessionID, title string) error {
-	return c.doPost("/api/session/rename", map[string]string{
-		"session_id": sessionID,
-		"title":      title,
-	}, nil)
-}
-
-// DeleteSession deletes a session.
-func (c *APIClient) DeleteSession(sessionID string) error {
-	return c.doPost("/api/session/delete", map[string]string{
-		"session_id": sessionID,
-	}, nil)
-}
-
-// PinSession pins or unpins a session.
-func (c *APIClient) PinSession(sessionID string, pinned bool) error {
-	return c.doPost("/api/session/pin", map[string]interface{}{
-		"session_id": sessionID,
-		"pinned":     pinned,
-	}, nil)
-}
-
-// ArchiveSession archives or unarchives a session.
-func (c *APIClient) ArchiveSession(sessionID string, archived bool) error {
-	return c.doPost("/api/session/archive", map[string]interface{}{
-		"session_id": sessionID,
-		"archived":   archived,
-	}, nil)
-}
-
-// ── Chat ──
-
-// StartChat starts a new chat message in a session.
-func (c *APIClient) StartChat(sessionID, message, workspace, model string) (*models.StreamStartResponse, error) {
-	body := map[string]string{
-		"session_id": sessionID,
-		"message":    message,
-	}
-	if workspace != "" { body["workspace"] = workspace }
-	if model != "" { body["model"] = model }
-
-	var result models.StreamStartResponse
-	if err := c.doPost("/api/chat/start", body, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// CancelChat cancels an active chat stream.
-func (c *APIClient) CancelChat(streamID string) error {
-	path := fmt.Sprintf("/api/chat/cancel?stream_id=%s", url.QueryEscape(streamID))
-	resp, err := c.httpClient.Get(c.baseURL + path)
-	if err != nil {
-		return fmt.Errorf("client: cancel chat: %w", err)
-	}
-	defer resp.Body.Close()
-	return nil
-}
-
-// SteerChat sends a /steer message to an active stream.
-func (c *APIClient) SteerChat(sessionID, text string) (*models.SteerResponse, error) {
-	var result models.SteerResponse
-	if err := c.doPost("/api/chat/steer", map[string]string{
-		"session_id": sessionID,
-		"text":       text,
-	}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// ── Models / Providers / Profiles ──
-
-// ListModels returns available models.
-func (c *APIClient) ListModels() ([]models.ModelInfo, error) {
-	var result []models.ModelInfo
-	if err := c.doGet("/api/models", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// ListProfiles returns available agent profiles.
-func (c *APIClient) ListProfiles() ([]models.ProfileInfo, error) {
-	var result []models.ProfileInfo
-	if err := c.doGet("/api/profiles", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// GetSettings returns server settings.
-func (c *APIClient) GetSettings() (*models.ServerSettings, error) {
-	var result models.ServerSettings
-	if err := c.doGet("/api/settings", &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// ── Workspace ──
-
-// ListWorkspace returns directory listing.
-func (c *APIClient) ListWorkspace(sessionID, path string) ([]models.WorkspaceEntry, error) {
-	reqPath := fmt.Sprintf("/api/list?session_id=%s&path=%s",
-		url.QueryEscape(sessionID), url.QueryEscape(path))
-	var result []models.WorkspaceEntry
-	if err := c.doGet(reqPath, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// GetFile reads a text file from the workspace.
-func (c *APIClient) GetFile(sessionID, path string) (*models.FileContent, error) {
-	reqPath := fmt.Sprintf("/api/file?session_id=%s&path=%s",
-		url.QueryEscape(sessionID), url.QueryEscape(path))
-	var result models.FileContent
-	if err := c.doGet(reqPath, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// ── Read-Only Panels ──
-
-// ListCronJobs returns scheduled tasks.
-func (c *APIClient) ListCronJobs() ([]models.CronJob, error) {
-	var result []models.CronJob
-	if err := c.doGet("/api/crons", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// ListSkills returns installed agent skills.
-func (c *APIClient) ListSkills() ([]models.Skill, error) {
-	var result []models.Skill
-	if err := c.doGet("/api/skills", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// GetMemory returns agent memory notes.
-func (c *APIClient) GetMemory() ([]models.MemoryEntry, error) {
-	var result []models.MemoryEntry
-	if err := c.doGet("/api/memory", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// ── Projects ──
-
-// ListProjects returns all projects.
-func (c *APIClient) ListProjects() ([]models.Project, error) {
-	var result []models.Project
-	if err := c.doGet("/api/projects", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// ── Reasoning ──
-
-// GetReasoning returns reasoning settings.
-func (c *APIClient) GetReasoning() (*models.ReasoningSettings, error) {
-	var result models.ReasoningSettings
-	if err := c.doGet("/api/reasoning", &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// ── Upload ──
-
-// UploadFile uploads a file to a session.
-// filePath is the local path, filename is the remote name.
-func (c *APIClient) UploadFile(sessionID, filePath, filename string) (*models.UploadResult, error) {
-	// Multipart upload — simplified for gomobile (file content passed as []byte)
-	// Full implementation in upload.go
-	return nil, fmt.Errorf("client: UploadFile not yet implemented for gomobile")
-}
-
-// unused imports guard
-var _ = strconv.Itoa
