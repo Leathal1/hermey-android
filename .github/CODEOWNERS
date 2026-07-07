@@ -1,0 +1,6 @@
+# Default maintainership
+* @Leathal1
+
+# Security-sensitive docs and workflows
+SECURITY.md @Leathal1
+.github/ @Leathal1
