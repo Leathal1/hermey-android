@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a feature or improvement for Hermey
+title: "Feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for product, Android, protocol, or UX proposals.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What operator problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should Hermey do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Android UI
+        - Notifications
+        - Hermes Agent connection
+        - Approval flow
+        - Security
+        - Documentation
+        - CI / tooling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security considerations
+      description: Does this affect auth, storage, networking, notifications, approvals, or command execution?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked the roadmap and existing issues first.
+          required: true
