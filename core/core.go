@@ -21,6 +21,7 @@ import (
 	"github.com/Leathal1/hermey-android/core/endpoints"
 	"github.com/Leathal1/hermey-android/core/models"
 	"github.com/Leathal1/hermey-android/core/sse"
+	"github.com/Leathal1/hermey-android/core/stream"
 )
 
 // Version is the Hermdroid core library version.
@@ -313,6 +314,18 @@ func (c *HermeyClient) ListMCPTools() ([]models.MCPTool, error) {
 func (c *HermeyClient) ListTools() ([]models.ToolConfig, error) {
 	return endpoints.ListTools(c.apiClient)
 }
+
+// ============================================================================
+// Streaming state machine
+// ============================================================================
+
+// NewStreamManager returns a stream state machine bound to this client.
+func (c *HermeyClient) NewStreamManager() *stream.Manager {
+	return stream.NewManager(c.apiClient)
+}
+
+// StreamManager is an alias for stream.Manager for gomobile naming clarity.
+type StreamManager = stream.Manager
 
 // ============================================================================
 // Read-Only Panels

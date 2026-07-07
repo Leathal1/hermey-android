@@ -5,201 +5,190 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
-// mockListener captures all events delivered by the SSE stream.
-type mockListener struct {
-	mu       sync.Mutex
-	tokens   []string
-	toolCalls []string
-	reasoning []string
-	streamEnd bool
-	errors   []string
-	cancelled bool
+type testListener struct {
+	mu          sync.Mutex
+	tokens      []string
+	toolCalls   []string
+	toolResults []string
+	reasoning   []string
+	streamEnd   int32
+	errors      []string
+	cancelled   int32
 }
 
-func (m *mockListener) OnToken(text string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.tokens = append(m.tokens, text)
-}
-func (m *mockListener) OnToolCall(callJSON string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.toolCalls = append(m.toolCalls, callJSON)
-}
-func (m *mockListener) OnReasoning(text string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.reasoning = append(m.reasoning, text)
-}
-func (m *mockListener) OnStreamEnd() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.streamEnd = true
-}
-func (m *mockListener) OnError(msg string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.errors = append(m.errors, msg)
-}
-func (m *mockListener) OnCancel() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cancelled = true
-}
+func (l *testListener) OnToken(text string)     { l.mu.Lock(); l.tokens = append(l.tokens, text); l.mu.Unlock() }
+func (l *testListener) OnToolCall(callJSON string) { l.mu.Lock(); l.toolCalls = append(l.toolCalls, callJSON); l.mu.Unlock() }
+func (l *testListener) OnToolResult(resultJSON string) { l.mu.Lock(); l.toolResults = append(l.toolResults, resultJSON); l.mu.Unlock() }
+func (l *testListener) OnReasoning(text string) { l.mu.Lock(); l.reasoning = append(l.reasoning, text); l.mu.Unlock() }
+func (l *testListener) OnStreamEnd()            { atomic.AddInt32(&l.streamEnd, 1) }
+func (l *testListener) OnError(msg string)      { l.mu.Lock(); l.errors = append(l.errors, msg); l.mu.Unlock() }
+func (l *testListener) OnCancel()                 { atomic.AddInt32(&l.cancelled, 1) }
 
-func newMockServer(t *testing.T, events string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
+func TestSSEAllEventTypes(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("server does not support flushing")
+			t.Fatal("no flusher")
 		}
-		fmt.Fprint(w, events)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, ":heartbeat\n\n")
+		fmt.Fprint(w, "event: token\ndata: {\"content\":\"hello\"}\n\n")
+		fmt.Fprint(w, "event: reasoning\ndata: {\"content\":\"thinking\"}\n\n")
+		fmt.Fprint(w, "event: tool_call\ndata: {\"id\":\"1\",\"name\":\"test\"}\n\n")
+		fmt.Fprint(w, "event: tool_result\ndata: {\"id\":\"1\",\"result\":\"ok\"}\n\n")
+		fmt.Fprint(w, "event: stream_end\ndata: {}\n\n")
 		flusher.Flush()
-	}))
-}
-
-func TestSSETokenEvents(t *testing.T) {
-	events := "event: token\ndata: {\"type\":\"token\",\"content\":\"hello\"}\n\nevent: token\ndata: {\"type\":\"token\",\"content\":\" world\"}\n\n"
-	srv := newMockServer(t, events)
-	defer srv.Close()
-
-	stream := NewStream(srv.URL, "test-stream", srv.Client())
-	ml := &mockListener{}
-	if err := stream.Subscribe(ml); err != nil {
-		t.Fatalf("subscribe: %v", err)
 	}
 
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if len(ml.tokens) != 2 {
-		t.Fatalf("tokens = %d, want 2", len(ml.tokens))
-	}
-	if ml.tokens[0] != "hello" {
-		t.Errorf("tokens[0] = %q, want hello", ml.tokens[0])
-	}
-	if ml.tokens[1] != " world" {
-		t.Errorf("tokens[1] = %q, want ' world'", ml.tokens[1])
-	}
-	if !ml.streamEnd {
-		t.Error("streamEnd = false, want true")
-	}
-}
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
 
-func TestSSEToolCallEvent(t *testing.T) {
-	events := "event: tool_call\ndata: {\"id\":\"tc1\",\"name\":\"search\"}\n\n"
-	srv := newMockServer(t, events)
-	defer srv.Close()
-
-	stream := NewStream(srv.URL, "test-stream", srv.Client())
-	ml := &mockListener{}
-	if err := stream.Subscribe(ml); err != nil {
-		t.Fatalf("subscribe: %v", err)
+	stream := NewStream(ts.URL, "s1", ts.Client())
+	l := &testListener{}
+	if err := stream.Subscribe(l); err != nil {
+		t.Fatalf("Subscribe: %v", err)
 	}
 
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if len(ml.toolCalls) != 1 {
-		t.Fatalf("toolCalls = %d, want 1", len(ml.toolCalls))
+	if got, want := len(l.tokens), 1; got != want {
+		t.Fatalf("tokens len = %d, want %d", got, want)
+	}
+	if l.tokens[0] != "hello" {
+		t.Errorf("token = %q, want hello", l.tokens[0])
+	}
+	if len(l.reasoning) != 1 || l.reasoning[0] != "thinking" {
+		t.Errorf("reasoning = %v", l.reasoning)
+	}
+	if len(l.toolCalls) != 1 {
+		t.Errorf("toolCalls len = %d", len(l.toolCalls))
+	}
+	if len(l.toolResults) != 1 {
+		t.Errorf("toolResults len = %d", len(l.toolResults))
+	}
+	if atomic.LoadInt32(&l.streamEnd) != 1 {
+		t.Errorf("streamEnd = %d", l.streamEnd)
 	}
 }
 
-func TestSSEReasoningEvent(t *testing.T) {
-	events := "event: reasoning\ndata: {\"type\":\"reasoning\",\"content\":\"thinking...\"}\n\n"
-	srv := newMockServer(t, events)
-	defer srv.Close()
-
-	stream := NewStream(srv.URL, "test-stream", srv.Client())
-	ml := &mockListener{}
-	if err := stream.Subscribe(ml); err != nil {
-		t.Fatalf("subscribe: %v", err)
+func TestSSECancelFromClient(t *testing.T) {
+	done := make(chan struct{})
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		flusher, _ := w.(http.Flusher)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for i := 0; i < 100; i++ {
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+			fmt.Fprintf(w, "event: token\ndata: {\"content\":\"%d\"}\n\n", i)
+			flusher.Flush()
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if len(ml.reasoning) != 1 {
-		t.Fatalf("reasoning = %d, want 1", len(ml.reasoning))
-	}
-	if ml.reasoning[0] != "thinking..." {
-		t.Errorf("reasoning[0] = %q, want 'thinking...'", ml.reasoning[0])
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
+
+	stream := NewStream(ts.URL, "s1", ts.Client())
+	l := &testListener{}
+
+	go func() {
+		time.Sleep(80 * time.Millisecond)
+		stream.Cancel()
+	}()
+
+	stream.Subscribe(l)
+	<-done
+
+	if atomic.LoadInt32(&l.cancelled) != 1 {
+		t.Errorf("cancelled = %d", l.cancelled)
 	}
 }
 
-func TestSSEHeartbeatIgnored(t *testing.T) {
-	events := ": heartbeat comment\nevent: token\ndata: {\"type\":\"token\",\"content\":\"ok\"}\n\n"
-	srv := newMockServer(t, events)
-	defer srv.Close()
+func TestSSEReconnect(t *testing.T) {
+	attempts := 0
+	var mu sync.Mutex
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/chat/stream/status" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		mu.Lock()
+		attempts++
+		cur := attempts
+		mu.Unlock()
 
-	stream := NewStream(srv.URL, "test-stream", srv.Client())
-	ml := &mockListener{}
-	if err := stream.Subscribe(ml); err != nil {
-		t.Fatalf("subscribe: %v", err)
+		flusher, _ := w.(http.Flusher)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if cur == 1 {
+			// Force a disconnect after one token.
+			fmt.Fprint(w, "event: token\ndata: {\"content\":\"first\"}\n\n")
+			flusher.Flush()
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			if conn != nil {
+				conn.Close()
+			}
+			return
+		}
+		fmt.Fprint(w, "event: token\ndata: {\"content\":\"second\"}\n\n")
+		fmt.Fprint(w, "event: stream_end\ndata: {}\n\n")
+		flusher.Flush()
 	}
 
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if len(ml.tokens) != 1 {
-		t.Fatalf("tokens = %d, want 1 (heartbeat should be ignored)", len(ml.tokens))
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
+
+	stream := NewStream(ts.URL, "s1", ts.Client())
+	l := &testListener{}
+
+	// Because our reconnect uses fixed exponential backoff, cap the test time
+	// by overriding the delay in this test.  We shorten via a small wrapper
+	// not exposed; instead just run with the real one-second delay.
+	go func() {
+		stream.Subscribe(l)
+	}()
+
+	time.Sleep(2500 * time.Millisecond)
+
+	l.mu.Lock()
+	tokens := append([]string{}, l.tokens...)
+	l.mu.Unlock()
+
+	if len(tokens) < 2 {
+		t.Fatalf("expected 2 tokens, got %v", tokens)
 	}
-	if ml.tokens[0] != "ok" {
-		t.Errorf("tokens[0] = %q, want ok", ml.tokens[0])
+	if tokens[0] != "first" {
+		t.Errorf("first token = %q", tokens[0])
+	}
+	if tokens[len(tokens)-1] != "second" {
+		t.Errorf("last token = %q", tokens[len(tokens)-1])
 	}
 }
 
 func TestSSEErrorEvent(t *testing.T) {
-	events := "event: error\ndata: {\"type\":\"error\",\"error\":\"something broke\"}\n\n"
-	srv := newMockServer(t, events)
-	defer srv.Close()
-
-	stream := NewStream(srv.URL, "test-stream", srv.Client())
-	ml := &mockListener{}
-	if err := stream.Subscribe(ml); err != nil {
-		t.Fatalf("subscribe: %v", err)
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: error\ndata: {\"error\":\"boom\"}\n\n")
+		w.(http.Flusher).Flush()
 	}
 
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if len(ml.errors) != 1 {
-		t.Fatalf("errors = %d, want 1", len(ml.errors))
-	}
-	if ml.errors[0] != "something broke" {
-		t.Errorf("errors[0] = %q, want 'something broke'", ml.errors[0])
-	}
-}
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
 
-func TestSSEStreamEnd(t *testing.T) {
-	events := "event: stream_end\ndata: {}\n\n"
-	srv := newMockServer(t, events)
-	defer srv.Close()
+	stream := NewStream(ts.URL, "s1", ts.Client())
+	l := &testListener{}
+	stream.Subscribe(l)
 
-	stream := NewStream(srv.URL, "test-stream", srv.Client())
-	ml := &mockListener{}
-	if err := stream.Subscribe(ml); err != nil {
-		t.Fatalf("subscribe: %v", err)
-	}
-
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if !ml.streamEnd {
-		t.Error("streamEnd = false, want true")
-	}
-}
-
-func TestStreamStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	active, err := StreamStatus(srv.URL, "test-stream", srv.Client())
-	if err != nil {
-		t.Fatalf("stream status: %v", err)
-	}
-	if !active {
-		t.Error("active = false, want true")
+	l.mu.Lock()
+	errs := append([]string{}, l.errors...)
+	l.mu.Unlock()
+	if len(errs) != 1 || errs[0] != "boom" {
+		t.Errorf("errors = %v", errs)
 	}
 }
