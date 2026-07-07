@@ -1,59 +1,77 @@
-# Hermey
+# Hermdroid
 
 Android-native companion client for Hermes Agent.
 
-Hermex brought Hermes Agent to iOS. Hermey brings the same mobile-first operator experience to Android.
+Hermex brought Hermes Agent to iOS. Hermdroid brings the same mobile-first operator experience to Android.
 
-> Status: early development. Public namespace reserved and project foundation in progress.
+> Status: Phase 6 in progress. Offline cache, settings, error/empty/loading states, Material 3 dynamic color, adaptive icon, splash screen, and Play Store listing draft are now in place.
 
-## What is Hermey?
+## What is Hermdroid?
 
-Hermey is a pocket command surface for Hermes Agent: briefs, messages, approvals, alerts, and agent control from Android.
-
-The goal is not to replace Hermes Agent. The goal is to provide a clean Android-native client for operators who want Hermes available from their phone with strong security defaults and a mobile-first workflow.
-
-## Planned Features
-
-- Hermes Agent mobile inbox
-- Push notifications for agent messages
-- Approval flows for sensitive actions
-- Secure local identity and device binding
-- Voice-to-agent command path
-- Background sync for briefs and alerts
-- Optional encrypted relay mode
-- Local-first preferences and session state
-- Operator-grade audit trail for approvals
+Hermdroid is a pocket command surface for Hermes Agent: briefs, messages, approvals, alerts, and agent control from Android.
 
 ## Project Principles
 
-- **Operator first:** the phone should be a command surface, not a toy demo.
-- **Security by default:** sensitive actions require explicit approval and clear context.
-- **Mobile-native:** Android UX should feel native, fast, and reliable.
-- **Protocol-friendly:** avoid unnecessary coupling so Hermey can evolve with Hermes Agent.
-- **Transparent governance:** roadmap, security policy, and contribution rules are public from the start.
+- **Operator first**
+- **Security by default**
+- **Mobile-native**
+- **Protocol-friendly**
+- **Transparent governance**
 
 ## Repository Layout
 
 ```text
 .github/                 GitHub community health, templates, and workflows
-docs/                    Architecture, branding, and project notes
-README.md                Project overview
-ROADMAP.md               Near-term build plan
-CONTRIBUTING.md          Contribution workflow
-SECURITY.md              Vulnerability reporting policy
-CODE_OF_CONDUCT.md       Community expectations
-LICENSE                  Apache-2.0 license
+app/                     Android application
+  src/main/
+    java/ai/greymattr/hermdroid/
+      core/cache/        JNI bridge to Go bbolt cache
+      data/local/        EncryptedSharedPreferences settings
+      data/repository/   Offline cache repository
+      feature/
+        common/          Error, empty, and loading skeleton states
+        inbox/           Session/message inbox
+        settings/        Server URL, token, model, theme
+        skills/          Empty skill list placeholder
+        tasks/           Empty task list placeholder
+      ui/theme/          Material 3 dynamic color theme
+core/
+  cache/                 Go bbolt session + message cache library
+  cachebridge/           gomobile / JNI bindings for the cache
+docs/
+  ARCHITECTURE.md        Architecture notes
+  BRANDING.md            Branding and naming guidelines
+  playstore/listing.md   Play Store listing draft
 ```
 
-Android source code will be added after the MVP architecture is finalized.
+## Building
 
-## Roadmap
+### Android app
 
-See [ROADMAP.md](ROADMAP.md).
+1. Install Android Studio and the Android SDK.
+2. Open the project.
+3. Build the native cache bridge (choose one path):
 
-## Contributing
+   **Option A — gomobile AAR (recommended)**
+   ```bash
+   go install golang.org/x/mobile/cmd/gomobile@latest
+   gomobile init
+   ./scripts/build-gomobile-aar.sh
+   ```
 
-Contributions are welcome once the initial Android scaffold lands. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and open an issue before large design or architecture changes.
+   **Option B — NDK shared libraries + JNI**
+   ```bash
+   export ANDROID_NDK_HOME=/path/to/ndk
+   ./scripts/build-native-cache.sh
+   ```
+4. Run `./gradlew assembleDebug`.
+
+### Go cache (host tests)
+
+```bash
+cd core/cache
+go test ./...
+```
 
 ## Security
 
@@ -65,4 +83,4 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
 
 ## Disclaimer
 
-Hermey is an independent Android client for Hermes Agent. It is not affiliated with, endorsed by, or sponsored by Nous Research unless otherwise stated.
+Hermdroid is an independent Android client for Hermes Agent. It is not affiliated with, endorsed by, or sponsored by Nous Research unless otherwise stated.

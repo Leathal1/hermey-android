@@ -56,3 +56,17 @@ Hermey is early-stage. This roadmap defines the first credible path from public 
 - [ ] Publish first tagged preview release
 - [ ] Document install path
 - [ ] Collect feedback from Hermes Agent users
+
+## Phase 6: Offline Cache + Store Polish
+
+- [x] Go bbolt offline read-only cache for sessions and messages
+- [x] LRU eviction policy by message count and byte size
+- [x] Kotlin cache bridge and repository exposing cached data when offline
+- [x] Settings screen (server URL, password/token, default model, theme)
+- [x] EncryptedSharedPreferences for auth tokens
+- [x] Error states: network down, auth expired, stream dropped, server unreachable
+- [x] Empty states: no sessions, no skills, no tasks
+- [x] Skeleton loading screens
+- [x] Material 3 dynamic color theming
+- [x] Adaptive launcher icon and splash screen
+- [x] Play Store listing draft
