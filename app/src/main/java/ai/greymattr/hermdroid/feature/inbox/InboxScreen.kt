@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ai.greymattr.hermdroid.feature.common.EmptyState
 import ai.greymattr.hermdroid.feature.common.ErrorState
-import ai.greymattr.hermdroid.feature.common.LoadingStates.SkeletonList
+import ai.greymattr.hermdroid.feature.common.SkeletonList
 import ai.greymattr.hermdroid.feature.common.NetworkDown
 import ai.greymattr.hermdroid.feature.common.NoSessions
 import ai.greymattr.hermdroid.feature.common.ServerUnreachable
@@ -42,7 +42,7 @@ fun InboxScreen(
                 title = { Text("Hermdroid") },
                 actions = {
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Warning, contentDescription = "Refresh")
                     }
                     IconButton(onClick = { /* navigate to settings */ }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")

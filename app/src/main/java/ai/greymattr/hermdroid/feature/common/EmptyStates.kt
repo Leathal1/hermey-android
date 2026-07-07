@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,10 +38,10 @@ fun EmptyState(
         verticalArrangement = Arrangement.Center
     ) {
         val icon = when (empty) {
-            NoSessions -> Icons.AutoMirrored.Filled.Chat
+            NoSessions -> Icons.AutoMirrored.Filled.List
             NoSkills -> Icons.Default.Build
-            NoTasks -> Icons.Default.Assignment
-            else -> Icons.Default.Inbox
+            NoTasks -> Icons.Default.Info
+            else -> Icons.Default.List
         }
         Icon(
             imageVector = icon,

@@ -7,10 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.SignalWifiOff
-import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -43,11 +39,11 @@ fun ErrorState(
         verticalArrangement = Arrangement.Center
     ) {
         val icon = when (error) {
-            NetworkDown -> Icons.Default.SignalWifiOff
+            NetworkDown -> Icons.Default.Warning
             AuthExpired -> Icons.Default.Warning
-            StreamDropped -> Icons.Default.SyncProblem
-            ServerUnreachable -> Icons.Default.CloudOff
-            else -> Icons.Default.Error
+            StreamDropped -> Icons.Default.Warning
+            ServerUnreachable -> Icons.Default.Warning
+            else -> Icons.Default.Warning
         }
         Icon(
             imageVector = icon,
