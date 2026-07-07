@@ -24,6 +24,57 @@ import (
 	"github.com/Leathal1/hermey-android/core/stream"
 )
 
+// Export types so gomobile generates bindings for the streaming bridge.
+// Kotlin implements sse.EventListener and passes it to StreamManager.Start.
+var (
+	_ sse.EventListener = (*EventListenerProxy)(nil)
+	_ *stream.Manager
+)
+
+// EventListenerProxy is a concrete implementation of sse.EventListener that
+// forwards all events to an embedded listener. It exists purely so gomobile
+// emits the EventListener interface in the AAR.
+type EventListenerProxy struct {
+	Listener sse.EventListener
+}
+
+func (p *EventListenerProxy) OnToken(text string) {
+	if p.Listener != nil {
+		p.Listener.OnToken(text)
+	}
+}
+func (p *EventListenerProxy) OnToolCall(callJSON string) {
+	if p.Listener != nil {
+		p.Listener.OnToolCall(callJSON)
+	}
+}
+func (p *EventListenerProxy) OnToolResult(resultJSON string) {
+	if p.Listener != nil {
+		p.Listener.OnToolResult(resultJSON)
+	}
+}
+func (p *EventListenerProxy) OnReasoning(text string) {
+	if p.Listener != nil {
+		p.Listener.OnReasoning(text)
+	}
+}
+func (p *EventListenerProxy) OnStreamEnd() {
+	if p.Listener != nil {
+		p.Listener.OnStreamEnd()
+	}
+}
+func (p *EventListenerProxy) OnError(msg string) {
+	if p.Listener != nil {
+		p.Listener.OnError(msg)
+	}
+}
+func (p *EventListenerProxy) OnCancel() {
+	if p.Listener != nil {
+		p.Listener.OnCancel()
+	}
+}
+
+
 // Version is the Hermdroid core library version.
 const Version = "0.1.0"
 
@@ -360,3 +411,4 @@ func (c *HermeyClient) ListKanbanTasks() ([]models.KanbanTask, error) {
 func (c *HermeyClient) ListInboxItems() ([]models.InboxItem, error) {
 	return endpoints.ListInboxItems(c.apiClient)
 }
+

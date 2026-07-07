@@ -1,5 +1,7 @@
 package ai.greymattr.hermdroid.feature.inbox
 
+import ai.greymattr.hermdroid.core.cache.CachedSession
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -25,12 +27,14 @@ import ai.greymattr.hermdroid.feature.common.EmptyState
 import ai.greymattr.hermdroid.feature.common.ErrorState
 import ai.greymattr.hermdroid.feature.common.SkeletonList
 import ai.greymattr.hermdroid.feature.common.NetworkDown
-import ai.greymattr.hermdroid.feature.common.NoSessions
 import ai.greymattr.hermdroid.feature.common.ServerUnreachable
+import ai.greymattr.hermdroid.feature.common.NoSessions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InboxScreen(
+    onSessionClick: (CachedSession) -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: InboxViewModel = viewModel()
 ) {
@@ -44,7 +48,7 @@ fun InboxScreen(
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Warning, contentDescription = "Refresh")
                     }
-                    IconButton(onClick = { /* navigate to settings */ }) {
+                    IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
@@ -75,7 +79,8 @@ fun InboxScreen(
                                             "${session.messageCount} messages",
                                             style = MaterialTheme.typography.bodyMedium
                                         )
-                                    }
+                                    },
+                                    modifier = Modifier.clickable { onSessionClick(session) }
                                 )
                             }
                         }
